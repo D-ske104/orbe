@@ -18,16 +18,23 @@ struct AttentionRow: Equatable {
 /// （activated な workspace ＝休眠除外）で、agentState ∈ {waiting, done, working} のペインを
 /// stateChangedAt 降順（同時刻は paneId 降順）に並べる。idle・nil は出さない。
 enum AttentionSnapshot {
-  /// 一覧に出す状態（idle は出さない。nil は対象外）。
+  /// 一覧の既定集合（idle は出さない。nil は対象外）。
   static let attentionStates: Set<String> = ["waiting", "done", "working"]
 
   /// 全 workspace を走査して Attention 行を組む。休眠（未 activate）workspace は対象外。
-  static func rows(of workspaces: [Workspace]) -> [AttentionRow] {
+  ///
+  /// `states` は拾う状態の集合。既定は一覧の既定集合（idle を含まない）で、単一情報源
+  /// （`AttentionStore`）に載るのはこの既定で組んだ行だけ——メニューバー投影がここを読むため、
+  /// 集合を広げると②の取り下げ判定や件数が動く。状態別に絞った一覧（TopBar のバッジ入口）は
+  /// store を通さずこの関数を直接呼ぶので、そこでだけ idle を渡せる。
+  static func rows(of workspaces: [Workspace], states: Set<String> = attentionStates)
+    -> [AttentionRow]
+  {
     var out: [AttentionRow] = []
     for ws in workspaces where ws.activated {
       for tab in ws.tabs {
         for pane in tab.controlAllPanes() {
-          guard let state = pane.agentState, attentionStates.contains(state) else { continue }
+          guard let state = pane.agentState, states.contains(state) else { continue }
           out.append(
             AttentionRow(
               paneId: pane.id,

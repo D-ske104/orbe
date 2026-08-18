@@ -46,6 +46,18 @@ enum AgentStateIcon {
 }
 
 extension AgentStateIcon.Kind {
+  /// 状態の表示ラベル。設定のアイコン一覧と、状態で絞った Attention 一覧の breadcrumb が共用する
+  /// ——同じ状態を指す名が面ごとに割れないよう、文言の引き先を 1 つに寄せる。
+  func label(_ l10n: LocalizationStore) -> String {
+    switch self {
+    case .working: return l10n.string(.agentStateWorking)
+    case .waiting: return l10n.string(.agentStateWaiting)
+    case .done: return l10n.string(.agentStateDone)
+    case .idle: return l10n.string(.agentStateIdle)
+    case .dormant: return l10n.string(.agentStateDormant)
+    }
+  }
+
   /// 永続キー・逆変換に使う状態文字列（`kinds` 逆引き表の SSOT）。
   var state: String {
     switch self {

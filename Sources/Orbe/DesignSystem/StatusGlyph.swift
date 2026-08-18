@@ -222,25 +222,70 @@ func statusSegments(_ rollup: [(state: String, count: Int)]) -> [StatusSegment] 
 /// 横断ステータスストリップ（グリフ＋数字のみ）。件数 0／未知状態は飛ばす。
 /// 項目=グリフ(13px 状態色)＋gap6＋件数(mono11.5・`statusText`)、項目間 gap14・仕切り線なし。
 /// 休止（idle）項目のみ opacity 0.55 で減光する。
+///
+/// `onTapState` を渡すと項目ごとに押せるようになる（chrome TopBar の入口）。表示専用の場所
+/// （workspace パレットの集計表）は渡さないので、当たり判定もホバーも持たない見た目のまま。
 struct StatusRollupView: View {
   let rollup: [(state: String, count: Int)]
   var glyphSize: CGFloat = 13
+  /// 状態バッジのクリック（引数は状態文字列）。nil なら表示専用。
+  var onTapState: ((String) -> Void)?
   @Environment(\.agentIconResolver) private var iconResolver
 
+  /// 押せるときに項目の**間**へ足す当たり幅。項目間隔 14 を隣り合う項目が 7 ずつ分け合う形にして、
+  /// 見た目の間隔を変えずに裸のグリフ列へ当たり判定を敷く。ストリップの両端には足さない
+  /// ——外形を表示専用のときと同じに保ち、左隣の窓ドラッグ面をタップ領域で削らないため。
+  private static let hitPad: CGFloat = 7
+
   var body: some View {
-    HStack(spacing: 14) {
-      ForEach(statusSegments(rollup)) { seg in
-        HStack(spacing: 6) {
-          StatusGlyphView(
-            kind: seg.kind, size: glyphSize, symbol: iconResolver.symbol(for: seg.kind))
-          Text("\(seg.count)")
-            .font(.system(size: 11.5, weight: .regular, design: .monospaced))
-            .foregroundStyle(Color.theme.statusText)
-        }
-        .opacity(seg.kind == .idle ? 0.55 : 1)
+    let interactive = onTapState != nil
+    let segments = statusSegments(rollup)
+    HStack(spacing: interactive ? 0 : 14) {
+      ForEach(Array(segments.enumerated()), id: \.element.id) { index, seg in
+        StatusRollupSegment(
+          segment: seg, glyphSize: glyphSize, symbol: iconResolver.symbol(for: seg.kind),
+          leadPad: interactive && index > 0 ? Self.hitPad : 0,
+          trailPad: interactive && index < segments.count - 1 ? Self.hitPad : 0,
+          onTap: onTapState)
       }
     }
     .tracking(Theme.Typography.trackingStatus)
+  }
+}
+
+/// ストリップの 1 項目。押せるとき（`onTap` 非 nil）だけ当たり領域とホバーの地を持つ。
+/// ホバーの地は `＋`（新規タブ）と同じ `tabSegBg`・radius xs——chrome で「押せる」を示す既存の形。
+/// 休止の減光はホバー中も保つ（押せることと状態の重みは別の話）。
+private struct StatusRollupSegment: View {
+  let segment: StatusSegment
+  let glyphSize: CGFloat
+  let symbol: String?
+  let leadPad: CGFloat
+  let trailPad: CGFloat
+  let onTap: ((String) -> Void)?
+  @State private var hovering = false
+
+  var body: some View {
+    HStack(spacing: 6) {
+      StatusGlyphView(kind: segment.kind, size: glyphSize, symbol: symbol)
+      Text("\(segment.count)")
+        .font(.system(size: 11.5, weight: .regular, design: .monospaced))
+        .foregroundStyle(Color.theme.statusText)
+    }
+    .opacity(segment.kind == .idle ? 0.55 : 1)
+    .padding(.leading, leadPad)
+    .padding(.trailing, trailPad)
+    .padding(.vertical, 2)
+    .background(
+      RoundedRectangle(cornerRadius: Theme.Radius.xs)
+        .fill(hovering ? Color.theme.tabSegBg : Color.clear)
+    )
+    .contentShape(Rectangle())
+    .onTapGesture { onTap?(segment.state) }
+    .onHover { hovering = $0 }
+    // 表示専用（workspace パレットの集計表）では hit test ごと通す——当たり判定を残すと、
+    // ストリップの上だけ行のタップが死ぬ。
+    .allowsHitTesting(onTap != nil)
   }
 }
 

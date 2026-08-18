@@ -39,8 +39,8 @@ enum Chrome {
   /// タブ `i` をタブごと閉じる（中クリック）。選択切替を挟まない。
   var onCloseTab: (Int) -> Void = { _ in }
   var onNewTab: () -> Void = {}
-  /// 右端の件数ストリップのクリック（Attention パレットを開く）。
-  var onAttentionTap: () -> Void = {}
+  /// 右端の件数ストリップの状態バッジのクリック（その状態だけに絞った Attention パレットを開く）。
+  var onStatusBadgeTap: (String) -> Void = { _ in }
   /// タブを `from` から挿入先 index `to`（0…count）へ並び替える（同一 workspace 内・commit-on-drop）。
   var onReorder: (Int, Int) -> Void = { _, _ in }
 
@@ -212,11 +212,9 @@ struct StatusRowView: View {
       Spacer(minLength: Theme.Space.beat)
 
       if !model.rollup.isEmpty {
-        // クリックで Attention パレット。見た目は変えない（hover 装飾は足さない）。
-        StatusRollupView(rollup: model.rollup)
+        // 状態ごとに押せる（当たり領域とホバーの地は `StatusRollupView` が項目内に持つ）。
+        StatusRollupView(rollup: model.rollup, onTapState: { model.onStatusBadgeTap($0) })
           .fixedSize()
-          .contentShape(Rectangle())
-          .onTapGesture { model.onAttentionTap() }
       }
     }
     .padding(.leading, Chrome.leftColumn)

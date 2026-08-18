@@ -149,7 +149,7 @@ final class WindowController: NSObject, NSWindowDelegate {
       self.closeTab(self.current.tabs[i], origin: .gesture)
     }
     statusModel.onNewTab = { [weak self] in self?.newTab() }
-    statusModel.onAttentionTap = { [weak self] in self?.showAttentionPalette() }
+    statusModel.onStatusBadgeTap = { [weak self] state in self?.tapAttentionBadge(state: state) }
     // pane 非依存 chrome コマンドの window レベル配信（surface が居ない0タブでも届く）。
     hostingView.onWindowCommand = { [weak self] command in
       self?.handleWindowKeyCommand(command) ?? false

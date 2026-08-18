@@ -1,16 +1,5 @@
 import SwiftUI
 
-/// 状態一覧に出す状態の表示ラベル（アイコン設定の文脈での状態名）。文言は現在言語で引く。
-private func agentStateLabel(_ kind: AgentStateIcon.Kind, _ l10n: LocalizationStore) -> String {
-  switch kind {
-  case .working: return l10n.string(.agentStateWorking)
-  case .waiting: return l10n.string(.agentStateWaiting)
-  case .done: return l10n.string(.agentStateDone)
-  case .idle: return l10n.string(.agentStateIdle)
-  case .dormant: return l10n.string(.agentStateDormant)
-  }
-}
-
 /// サブパレット（theme / agent / font）の行組み立て。本体（状態機械）から分離する。
 ///
 /// 3 モードに共通する不変条件: `●`（現在値マーカー）と初期ハイライト（選択色）は `currentRowIndex`
@@ -175,7 +164,7 @@ extension SettingsPaletteModel {
     currentRowIndex = nil
     render.rows = AgentStateIcon.Kind.allCases.map { kind in
       PaletteModel.RowItem(
-        label: agentStateLabel(kind, localization) + "  " + statePreviewLabel(kind),
+        label: kind.label(localization) + "  " + statePreviewLabel(kind),
         chevron: true,
         leading: AnyView(
           StatusGlyphView(kind: kind, size: 14, symbol: values.effSymbol(for: kind))))
@@ -192,7 +181,7 @@ extension SettingsPaletteModel {
   func rebuildAgentIcon(kind: AgentStateIcon.Kind) {
     render.fieldVisible = false
     render.fieldIsFilter = false
-    render.breadcrumb = "‹ " + agentStateLabel(kind, localization)
+    render.breadcrumb = "‹ " + kind.label(localization)
     render.placeholder = ""
     render.hint = localization.string(.settingsSubHintApply)
     let symbols = AgentStateIcon.curatedSymbols[kind] ?? []

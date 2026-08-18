@@ -223,8 +223,8 @@ func statusSegments(_ rollup: [(state: String, count: Int)]) -> [StatusSegment] 
 /// 項目=グリフ(13px 状態色)＋gap6＋件数(mono11.5・`statusText`)、項目間 gap14・仕切り線なし。
 /// 休止（idle）項目のみ opacity 0.55 で減光する。
 ///
-/// `onTapState` を渡すと項目ごとに押せるようになる（chrome TopBar の入口）。表示専用の場所
-/// （workspace パレットの集計表）は渡さないので、当たり判定もホバーも持たない見た目のまま。
+/// `onTapState` を渡すと項目ごとに押せるようになる（chrome TopBar の入口）。渡さなければ
+/// 当たり判定もホバーも持たない表示専用のまま——器のタップを奪わせないため。
 struct StatusRollupView: View {
   let rollup: [(state: String, count: Int)]
   var glyphSize: CGFloat = 13
@@ -283,8 +283,8 @@ private struct StatusRollupSegment: View {
     .contentShape(Rectangle())
     .onTapGesture { onTap?(segment.state) }
     .onHover { hovering = $0 }
-    // 表示専用（workspace パレットの集計表）では hit test ごと通す——当たり判定を残すと、
-    // ストリップの上だけ行のタップが死ぬ。
+    // 表示専用なら hit test ごと通す——当たり判定を残すと、ストリップが載った器の上で
+    // そこだけタップが死ぬ。
     .allowsHitTesting(onTap != nil)
   }
 }

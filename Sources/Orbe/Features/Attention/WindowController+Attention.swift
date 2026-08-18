@@ -7,9 +7,30 @@ extension WindowController {
   /// パレット表示中は開いたまま行を追従させる（`reloadPalette` と同じ流儀）。
   func refreshAttentionSnapshot() {
     attentionStore.apply(rows: AttentionSnapshot.rows(of: workspaces))
-    if model.overlay == .attentionPalette {
-      model.attentionPalette?.setRows(attentionStore.rows)
+    if model.overlay == .attentionPalette, let palette = model.attentionPalette {
+      palette.setRows(attentionRows(filter: palette.filter))
     }
+  }
+
+  /// パレットに流す行。既定は単一情報源（`attentionStore`）をそのまま渡し、絞り込みは
+  /// パレット側が効かせる。休止（idle）で絞ったときだけ builder を直接呼ぶ——idle は store に
+  /// 載らない（載せるとメニューバー投影の件数・一覧・②の取り下げ判定が動く）ので、
+  /// この一覧のためだけに組み直す。
+  private func attentionRows(filter: AgentStateIcon.Kind?) -> [AttentionRow] {
+    guard filter == .idle else { return attentionStore.rows }
+    return AttentionSnapshot.rows(of: workspaces, states: [AgentStateIcon.Kind.idle.state])
+  }
+
+  /// TopBar の状態バッジのクリック。押した状態だけに絞った一覧を開く。同じ状態のバッジを
+  /// もう一度押せば閉じる（開いた入口をそのまま出口にする）。⌘⌘ で開いている絞り込みなしの
+  /// 一覧から押したときは、閉じずにその状態の一覧へ差し替える。
+  func tapAttentionBadge(state: String) {
+    guard let kind = AgentStateIcon.kind(state: state) else { return }
+    if model.overlay == .attentionPalette, model.attentionPalette?.filter == kind {
+      dismissPalette()
+      return
+    }
+    showAttentionPalette(filter: kind)
   }
 
   /// ⌘⌘（前面時）のトグル。開いていれば閉じ、他パレット表示中は差し替える（既存パレット同士の
@@ -29,20 +50,22 @@ extension WindowController {
     }
   }
 
-  /// Attention パレットを開く（TopBar ストリップのクリック・⌘⌘）。既に開いていれば再フォーカス。
-  func showAttentionPalette() {
-    if model.overlay == .attentionPalette {
+  /// Attention パレットを開く（⌘⌘＝絞り込みなし・TopBar の状態バッジ＝その状態だけ）。
+  /// 同じ絞り込みで既に開いていれば再フォーカスするだけ。**違う絞り込みなら中身を立て直す**
+  /// ——早期 return のままだと、開いている最中に別のバッジを押しても何も起きない。
+  func showAttentionPalette(filter: AgentStateIcon.Kind? = nil) {
+    if model.overlay == .attentionPalette, model.attentionPalette?.filter == filter {
       model.attentionPalette?.focus()
       return
     }
-    let p = AttentionPaletteModel(localization: localization)
+    let p = AttentionPaletteModel(localization: localization, filter: filter)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
     p.onFocusPane = { [weak self] paneId in
       guard let self else { return }
       _ = self.controlFocusPane(paneId: paneId)  // WS activate＋タブ選択＋ペイン focus（既存経路を共用）
       self.dismissPalette()  // done のフォーカス消費は select() 経由で既存規律どおり効く
     }
-    p.setRows(attentionStore.rows)
+    p.setRows(attentionRows(filter: filter))
     model.attentionPalette = p
     model.overlay = .attentionPalette
     p.focus()

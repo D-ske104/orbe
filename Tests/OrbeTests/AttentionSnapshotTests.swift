@@ -83,6 +83,38 @@ final class AttentionSnapshotTests: OrbeTestCase {
     XCTAssertEqual(rows.map(\.message), ["質問文", "最終応答"])
   }
 
+  /// 既定集合は idle を拾わない——ここが単一情報源（`AttentionStore`）に載る行で、
+  /// メニューバー投影（一覧・件数・working 集約）はすべてこの集合の派生。集合を広げると
+  /// ②の取り下げ判定まで動くので、状態で絞った一覧のために既定を触らないことを固定する。
+  func testIdleStaysOutOfDefaultSetAndProjections() {
+    let base = Date()
+    let idle = workspace(name: "idle")
+    setState(idle, state: "idle", message: "終了時に残った文言", at: base)
+    let w = workspace(name: "w")
+    setState(w, state: "waiting", at: base.addingTimeInterval(-1))
+    let g = workspace(name: "g")
+    setState(g, state: "working", at: base.addingTimeInterval(-2))
+
+    let rows = AttentionSnapshot.rows(of: [idle, w, g])
+    XCTAssertEqual(rows.map(\.workspaceName), ["w", "g"], "既定集合に idle は入らない")
+    XCTAssertEqual(AttentionSnapshot.listRows(rows).map(\.workspaceName), ["w"])
+    XCTAssertEqual(AttentionSnapshot.workingSummary(rows)?.names, ["g"])
+  }
+
+  /// 状態を明示すれば idle だけを拾える（TopBar の休止バッジから開く一覧が使う経路）。
+  /// 文言は working 以外と同じ規律で残す——休止行は「何が終わったか」を減光して見せる。
+  func testExplicitStatesPicksIdleOnly() {
+    let base = Date()
+    let idle = workspace(name: "idle")
+    setState(idle, state: "idle", message: "PR を作成しました", at: base)
+    let w = workspace(name: "w")
+    setState(w, state: "waiting", at: base.addingTimeInterval(-1))
+
+    let rows = AttentionSnapshot.rows(of: [idle, w], states: ["idle"])
+    XCTAssertEqual(rows.map(\.workspaceName), ["idle"])
+    XCTAssertEqual(rows.map(\.message), ["PR を作成しました"])
+  }
+
   // MARK: メニューバー派生
 
   /// 一覧行・件数は waiting+done のみ（working は数えない）。

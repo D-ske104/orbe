@@ -8,9 +8,11 @@ import XCTest
 @MainActor
 final class AttentionPaletteTests: OrbeTestCase {
 
-  private func row(_ paneId: Int, at offset: TimeInterval) -> AttentionRow {
+  private func row(_ paneId: Int, at offset: TimeInterval, state: String = "waiting")
+    -> AttentionRow
+  {
     AttentionRow(
-      paneId: paneId, workspaceName: "ws\(paneId)", tabTitle: "tab", state: "waiting",
+      paneId: paneId, workspaceName: "ws\(paneId)", tabTitle: "tab", state: state,
       message: nil, stateChangedAt: Date().addingTimeInterval(offset))
   }
 
@@ -39,6 +41,89 @@ final class AttentionPaletteTests: OrbeTestCase {
 
     model.setRows([row(1, at: -10)])
     XCTAssertEqual(model.render.selected, 0)
+  }
+
+  // MARK: 状態で絞った一覧（TopBar の状態バッジから開く）
+
+  /// 絞り込みは入口が決める——渡された行のうち、その状態のものだけが並ぶ。
+  func testFilterKeepsOnlyItsState() {
+    let model = AttentionPaletteModel(filter: .done)
+    model.setRows([
+      row(1, at: -10, state: "waiting"), row(2, at: -20, state: "done"),
+      row(3, at: -30, state: "working"), row(4, at: -40, state: "done"),
+    ])
+
+    var focused: Int?
+    model.onFocusPane = { focused = $0 }
+    model.render.selected = 1
+    model.activate()
+    XCTAssertEqual(focused, 4, "done の 2 行だけが並ぶ（index 1 は ペイン 4）")
+  }
+
+  /// 錨の追い直しは**絞り込み後**の並びで効く。絞る前の並びで錨を取ると、
+  /// ↵ が選んだ覚えのない別ペインへ飛ぶ（フィルタ無しのときと同じ事故）。
+  func testFilteredSelectionFollowsPaneWhenRowsShift() {
+    let model = AttentionPaletteModel(filter: .done)
+    model.setRows([
+      row(1, at: -10, state: "done"), row(2, at: -15, state: "waiting"),
+      row(3, at: -20, state: "done"),
+    ])
+    model.render.selected = 1  // 絞り込み後の 2 行目 ＝ ペイン 3
+
+    // ペイン 4 が done になって先頭へ入り、waiting も 1 枚増える（絞り込み前の並びは総ずれ）。
+    model.setRows([
+      row(4, at: 0, state: "done"), row(5, at: -5, state: "waiting"),
+      row(1, at: -10, state: "done"), row(2, at: -15, state: "waiting"),
+      row(3, at: -20, state: "done"),
+    ])
+    XCTAssertEqual(model.render.selected, 2, "選択は index でなくペイン 3 に追随する")
+
+    var focused: Int?
+    model.onFocusPane = { focused = $0 }
+    model.activate()
+    XCTAssertEqual(focused, 3)
+  }
+
+  /// 選択行が絞り込みから外れたら（状態が変わった）、一覧から消えたのと同じく範囲へ丸める。
+  func testFilteredSelectionClampsWhenRowLeavesFilter() {
+    let model = AttentionPaletteModel(filter: .done)
+    model.setRows([
+      row(1, at: -10, state: "done"), row(2, at: -20, state: "done"),
+      row(3, at: -30, state: "done"),
+    ])
+    model.render.selected = 2  // ペイン 3
+
+    model.setRows([
+      row(1, at: -10, state: "done"), row(2, at: -20, state: "done"),
+      row(3, at: -30, state: "working"),  // 選択していた行が絞り込みから外れる
+    ])
+    XCTAssertEqual(model.render.selected, 1)
+  }
+
+  /// 休止（idle）で絞った一覧も同じ器で並ぶ——builder が組み直した行をそのまま受ける。
+  func testIdleFilterListsIdleRows() {
+    let model = AttentionPaletteModel(filter: .idle)
+    model.setRows([row(1, at: -10, state: "idle"), row(2, at: -20, state: "idle")])
+
+    var focused: Int?
+    model.onFocusPane = { focused = $0 }
+    model.render.selected = 1
+    model.activate()
+    XCTAssertEqual(focused, 2)
+  }
+
+  /// `⌘⌘` バッジは絞り込みなしの一覧にだけ出す（絞った一覧に載せると到達手段の嘘になる）。
+  /// breadcrumb は押した状態を見出しにする。
+  func testHeaderShowsFilterAndDropsShortcutPill() {
+    let l10n = LocalizationStore(language: .systemDefault)
+    let plain = AttentionPaletteModel(localization: l10n)
+    XCTAssertEqual(plain.render.breadcrumb, "attention")
+    XCTAssertEqual(plain.render.headerPills.map(\.label), ["⌘⌘"])
+
+    let filtered = AttentionPaletteModel(localization: l10n, filter: .done)
+    XCTAssertEqual(
+      filtered.render.breadcrumb, "attention › " + AgentStateIcon.Kind.done.label(l10n))
+    XCTAssertTrue(filtered.render.headerPills.isEmpty)
   }
 
   /// 追い直しはモダリティを奪わない——ポインタ操作中に裏で行が動いても、ホバー追従が切れない。
